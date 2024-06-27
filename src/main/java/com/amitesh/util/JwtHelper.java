@@ -1,13 +1,20 @@
 package com.amitesh.util;
 
-import com.amitesh.configuration.JWTConfiguration;
+import static com.amitesh.configuration.JwtConfiguration.AUDIENCE;
+import static com.amitesh.configuration.JwtConfiguration.CLAIM_KEY_NAME;
+import static com.amitesh.configuration.JwtConfiguration.CLAIM_KEY_SCOPE;
+import static com.amitesh.configuration.JwtConfiguration.CLAIM_VALUE_NAME;
+import static com.amitesh.configuration.JwtConfiguration.CLAIM_VALUE_SCOPE;
+import static com.amitesh.configuration.JwtConfiguration.CLOCK_SKEW_SEC;
+import static com.amitesh.configuration.JwtConfiguration.ISSUER;
+import static com.amitesh.configuration.JwtConfiguration.JWT_ID;
+import static com.amitesh.configuration.JwtConfiguration.TTL_MILLISECOND;
+
+import com.amitesh.configuration.JwtConfiguration;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jws;
 import io.jsonwebtoken.JwtBuilder;
 import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.Jwts;
-import java.security.Key;
-import java.util.Arrays;
 import java.util.Date;
 
 public class JwtHelper {
@@ -19,49 +26,47 @@ public class JwtHelper {
       eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJKb2UifQ.I12a3j-7rr4DtsUFAGJaeUSVxQYdqAqInK-onmrCDOA
       base64URLEncode( header.getBytes("UTF-8") ).base64URLEncode( claims.getBytes("UTF-8") ).base64URLEncode( signature )
   */
-  public static String encode(final String payload) {
+  public static String encryptClaims(final String payload, final SignatureAlgoKeyType signatureAlgoKeyType) {
     long nowMillis = System.currentTimeMillis();
     Date now = new Date(nowMillis);
 
-    JwtBuilder jwtBuilder = Jwts.builder().setSubject(payload).setIssuedAt(now);
-    System.out.println("Set payload: " + payload);
+    JwtBuilder jwtBuilder = JwtConfiguration.signWith(signatureAlgoKeyType)
+        .id(JWT_ID)
+        .issuer(ISSUER)
+        .audience().add(AUDIENCE).and()
+        .claim(CLAIM_KEY_NAME, CLAIM_VALUE_NAME)
+        .claim(CLAIM_KEY_SCOPE, CLAIM_VALUE_SCOPE)
+        .subject(payload)
+        .issuedAt(now);
+    System.out.println("Payload: " + payload);
 
-    //if TTL has been specified, let's add the expiration time
-    long ttl = JWTConfiguration.getTTL();
-    if (ttl >= 0) {
-      System.out.println("Get TTL in millisecond: " + ttl);
-      long expMillis = nowMillis + ttl;
-      Date exp = new Date(expMillis);
-      jwtBuilder.setExpiration(exp);
-      System.out.println("Current Time: " + nowMillis);
-      System.out.println("Set expiration: " + exp.getTime());
-    }
-    final Key secretKey = JWTConfiguration.getSecretKey();
-    System.out.println(
-        "Get Primary Encoded format of Key: " + Arrays.toString(secretKey.getEncoded()));
-    System.out.println("Get Key Algorithm: " + secretKey.getAlgorithm());
-    System.out.println("Get Key Format: " + secretKey.getFormat());
+    long ttl = TTL_MILLISECOND;
+    System.out.println("TTL in millisecond: " + ttl);
+    long expMillis = nowMillis + ttl;
+    Date exp = new Date(expMillis);
+    jwtBuilder.expiration(exp);
+    jwtBuilder.notBefore(now); //The token should be rejected if the current time is before the time
+    System.out.println("Current Time: " + nowMillis);
+    System.out.println("Expiring At: " + exp.getTime());
 
-    return jwtBuilder.signWith(secretKey).compact();
+    return jwtBuilder.compact();
   }
 
-  public static String decode(final String encodedPayload) {
-    return decodeClaims(encodedPayload).getBody().getSubject();
-  }
-
-  public static Jws<Claims> decodeClaims(final String encodedPayload) {
+  public static Jws<Claims> decryptClaims(final String encodedPayload,
+      final SignatureAlgoKeyType signatureAlgoKeyType) {
     try {
-      return Jwts.parser()
-          // .setAllowedClockSkewSeconds(JWTConfiguration.getClockSkewSec())
-          .setSigningKey(JWTConfiguration.getSecretKey())
-          .parseClaimsJws(encodedPayload);
+      return JwtConfiguration.verifyWith(signatureAlgoKeyType)
+          .clockSkewSeconds(CLOCK_SKEW_SEC)
+          .requireAudience(AUDIENCE)
+          .requireId(JWT_ID)
+          .requireIssuer(ISSUER)
+          .require(CLAIM_KEY_NAME, CLAIM_VALUE_NAME)
+          .require(CLAIM_KEY_SCOPE, CLAIM_VALUE_SCOPE)
+          .build()
+          .parseSignedClaims(encodedPayload);
     } catch (JwtException e) {
       //don't trust the JWT!
-            /*
-            io.jsonwebtoken.security.SignatureException: JWT signature does not match locally computed signature.
-            JWT validity cannot be asserted and should not be trusted.
-             */
-      e.printStackTrace();
+      System.err.println(e.getMessage());
     }
     return null;
   }
