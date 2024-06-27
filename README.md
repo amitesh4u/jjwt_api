@@ -38,6 +38,12 @@ Jws<Claims>.getPayload().get(CLAIM_KEY)
 ## Symmetric and Asymmetric Algorithm Keys
 This application provides option to use either Symmetric or Asymmetric Signature algorithm keys.
 To select please provide the Key type while encryption/decryption (same for both flows)
+
+- **Asymmetric key: Edwards-Curve Digital Signature Algorithm (EdDSA) (supported with JDK15+)**
+
+
+- **Symmetric key: SHA-512 hash algorithm (HS512)**
+
 ```
 JwtHelper.encryptClaims(payload, SignatureAlgoKeyType.ASYMMETRIC);
 
